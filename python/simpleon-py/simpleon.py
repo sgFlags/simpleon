@@ -200,7 +200,7 @@ class SimpleONParser:
                 elif self.buf[m.start(0)] == "#":
                     read_pos = len(self.buf)
                 else:
-                    raise Exception("format error - expecting dict key")
+                    raise Exception("format error - expecting dict key or end")
 
             elif state == self.STATE_DICT_KEY:
                 pass
