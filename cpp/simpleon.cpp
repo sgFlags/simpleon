@@ -63,7 +63,11 @@ public:
     const map<string, IData *> & GetDict() override { return value; }
 };
 
+ParseException::ParseException(const char * w) : _what(w) { }
+const char * ParseException::what() const noexcept { return _what.c_str(); }
+
 #define IS_SPECIAL_CHAR(c) ((c) == ' ' || (c) == '\t' || (c) == '[' || (c) == ']' || (c) == '{' || (c) == '}' || (c) == ':' || (c) == '"' || (c) == ',' || (c) == '#')
+#define BUF_CLEAN_THRESHOLD 4096
 
 class SimpleONParser : public IParser {
 private:
@@ -125,6 +129,20 @@ public:
         }
     }
 
+    void HandleUnquotedString(size_t s, size_t e) {
+        auto v = new StringData(false);
+        v->value.assign(_buf, s, e - s);
+        _valueStack.push_back(v);
+    }
+
+    void CleanBuf() {
+        if (_readPos > _buf.size()) _readPos = _buf.size(); 
+        if (_readPos > BUF_CLEAN_THRESHOLD) {
+            _buf = _buf.substr(_readPos, _buf.size() - _readPos);
+            _readPos = 0;
+        }
+    }
+
     void ParseBuf() {
         if (_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) return;
         size_t limit = _buf.size();
@@ -157,7 +175,7 @@ public:
                     break;
 
                 default:
-                    throw exception("invalid state to insert element");
+                    throw ParseException("invalid state to insert element");
                 }
                 break;
             }
@@ -228,7 +246,7 @@ public:
                     _readPos = limit;
                 }
                 else {
-                    throw exception("format error - expecting dict key or end");
+                    throw ParseException("format error - expecting dict key or end");
                 }
                 
                 break;
@@ -252,7 +270,7 @@ public:
                     _readPos = limit;
                 }
                 else {
-                    throw exception("format error - expecting key-value-separator");
+                    throw ParseException("format error - expecting key-value-separator");
                 }
                 
                 break;
@@ -283,7 +301,7 @@ public:
                     _readPos = limit;
                 }
                 else {
-                    throw exception("format error in dict");
+                    throw ParseException("format error in dict");
                 }
                 
                 break;
@@ -348,10 +366,8 @@ public:
                 else {
                     size_t e = s;
                     while (e < limit && !IS_SPECIAL_CHAR(_buf[e])) ++e;
-                    
-                    auto v = new StringData(false);
-                    v->value.assign(_buf, s, e - s);
-                    _valueStack.push_back(v);
+
+                    HandleUnquotedString(s, e);
                     _stateStack.back() = STATE_ELEMENT_END;
                     _readPos = e;
                 }
@@ -360,8 +376,10 @@ public:
             }
             }
         }
-    }
 
+        CleanBuf();
+    }
+    
     IData * Extract() override {
         if ((_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) &&
             _valueStack.size() == 1) {

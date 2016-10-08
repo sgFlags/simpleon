@@ -14,7 +14,7 @@ int main() {
         try {
             parser->ParseLine(line);
         }
-        catch (const exception &e) {
+        catch (const ParseException & e) {
             cerr << "Parsing error at line" << line_num << ": " << e.what() << endl;
         }
     }

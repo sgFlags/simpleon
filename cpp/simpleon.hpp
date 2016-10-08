@@ -5,6 +5,7 @@
 #include <list>
 #include <map>
 #include <iostream>
+#include <stdexcept>
 
 namespace simpleon {
     class IData {
@@ -34,6 +35,14 @@ namespace simpleon {
         virtual void ParseLine(const std::string & line) = 0;
         virtual IData * Extract() = 0;
         virtual ~IParser() = default;
+    };
+
+    class ParseException : public std::exception {
+    private:
+        std::string _what;
+    public:
+        ParseException(const char * w);
+        const char * what() const noexcept override;
     };
 
     IParser * CreateSimpleONParser();
