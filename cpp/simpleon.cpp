@@ -1,4 +1,8 @@
 #include "simpleon.hpp"
+#include <vector>
+#include <iostream>
+#include <bitset>
+#include <iomanip>
 
 using namespace simpleon;
 using namespace std;
@@ -59,7 +63,7 @@ public:
     const map<string, IData *> & GetDict() override { return value; }
 };
 
-#define IS_SPECIAL_CHAR(c) ((c) == '[' || (c) == ']' || (c) == '{' || (c) == '}' || (c) == ':' || (c) == '"' || (c) == '\\' || (c) == ',')
+#define IS_SPECIAL_CHAR(c) ((c) == ' ' || (c) == '\t' || (c) == '[' || (c) == ']' || (c) == '{' || (c) == '}' || (c) == ':' || (c) == '"' || (c) == ',' || (c) == '#')
 
 class SimpleONParser : public IParser {
 private:
@@ -79,7 +83,7 @@ private:
     };
     
     string _buf;
-    int _readPos;
+    size_t _readPos;
     vector<string>  _keyStack;
     vector<IData *> _valueStack;
     vector<State>   _stateStack;
@@ -92,18 +96,42 @@ public:
     }
     
     void ParseLine(const string & line) {
-        if (_stackStack.size() == 0) return;
+        if (_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) return;
         
         _buf.append(line);
         ParseBuf();
     }
 
+    void HandleEscape() {
+        if (_readPos >= _buf.size()) return;
+        auto && value = (*(StringData *)_valueStack.back()).value;
+        switch (_buf[_readPos]) {
+        case 'n':
+            value += '\n';
+            ++_readPos;
+            break;
+        case 't':
+            value += '\t';
+            ++_readPos;
+            break;
+        case 'r':
+            value += '\r';
+            ++_readPos;
+            break;
+        default:
+            value += _buf[_readPos];
+            ++_readPos;
+            break;
+        }
+    }
+
     void ParseBuf() {
-        if (_stateStack.size() == 0) return;
-        int limit = _buf.size();
+        if (_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) return;
+        size_t limit = _buf.size();
         while (_readPos < limit) {
 
             auto state = _stateStack.back();
+            
             switch (state) {
             case STATE_ELEMENT_END: {
                 auto value = _valueStack.back();
@@ -115,36 +143,35 @@ public:
                 switch (_stateStack.back()) {
                 case STATE_DICT_KEY:
                     _stateStack.back() = STATE_DICT_POST_KEY;
-                    _keyStack.push_back(_valueStack.GetString());
+                    _keyStack.push_back(value->GetString());
                     break;
                     
                 case STATE_DICT_VALUE:
-                    (*(DictData *)_valueStack.back())[_keyStack.back()] = value;
+                    ((DictData *)_valueStack.back())->value[_keyStack.back()] = value;
                     _keyStack.pop_back();
                     _stateStack.back() = STATE_DICT_POST_VALUE;
                     break;
                     
                 case STATE_LIST:
-                    (*(ListData *)_valueStack.back()).push_back(value);
+                    ((ListData *)_valueStack.back())->value.push_back(value);
                     break;
 
                 default:
-                    throw logic_error("invalid state to insert element");
+                    throw exception("invalid state to insert element");
                 }
                 break;
             }
             case STATE_QUOTED_STRING: {
-                int s = _readPos;
+                size_t s = _readPos;
                 while (s < limit && _buf[s] != '"' && _buf[s] != '\\') ++s;
-                (*(StringData *)_valueStack.back()).value.append(_buf, _readPos, s - _readPos);
+
+                ((StringData *)_valueStack.back())->value.append(_buf, _readPos, s - _readPos);
                 
-                if (s == limit) {
-                    (*(StringData *)_valueStack.back()).value.append(_buf, _readPos, limit - _readPos);
+                if (s >= limit) {
                     _readPos = limit;
                     _stateStack.back() = STATE_ELEMENT_END;
                 }
                 else {
-                    (*(StringData *)_valueStack.back()).value.append(_buf, _readPos, s - _readPos);
                     if (_buf[s] == '\\') {
                         _readPos = s + 1;
                         HandleEscape();
@@ -157,13 +184,13 @@ public:
                 break;
             }
             case STATE_MULTILINE_STRING: {
-                int s = _readPos;
+                size_t s = _readPos;
                 while (s < limit && _buf[s] != '"' && _buf[s] != '\\') ++s;
-                (*(StringData *)_valueStack.back()).value.append(_buf, _readPos, s - _readPos);
+                ((StringData *)_valueStack.back())->value.append(_buf, _readPos, s - _readPos);
                 
-                if (s == limit) {
-                    (*(StringData *)_valueStack.back()).value.append(1, '\n');
-                    _readPos = s;
+                if (s >= limit) {
+                    ((StringData *)_valueStack.back())->value += '\n';
+                    _readPos = limit;
                 }
                 else {
                     if (_buf[s] == '\\') {
@@ -175,18 +202,18 @@ public:
                         _stateStack.back() = STATE_ELEMENT_END;
                     }
                     else {
-                        (*(StringData *)_valueStack.back()).value.append(1, '"');
+                        ((StringData *)_valueStack.back())->value += '"';
                         _readPos = s + 1;
                     }
                 }
                 break;
             }
             case STATE_DICT_PRE_KEY: {
-                int s = _readPos;
-                while (s < limit && _buf[s] != ' ' && _buf[s] != '\t') ++s;
+                size_t s = _readPos;
+                while (s < limit && (_buf[s] == ' ' || _buf[s] == '\t')) ++s;
 
-                if (s == limit) {
-                    _readPos = s;
+                if (s >= limit) {
+                    _readPos = limit;
                 }
                 else if (_buf[s] == '"' || !IS_SPECIAL_CHAR(_buf[s])) {
                     _readPos = s;
@@ -201,7 +228,7 @@ public:
                     _readPos = limit;
                 }
                 else {
-                    throw logic_error("format error -expecting dict key or end")
+                    throw exception("format error - expecting dict key or end");
                 }
                 
                 break;
@@ -210,11 +237,11 @@ public:
                 break;
             }
             case STATE_DICT_POST_KEY: {
-                int s = _readPos;
-                while (s < limit && _buf[s] != ' ' && _buf[s] != '\t') ++s;
+                size_t s = _readPos;
+                while (s < limit && (_buf[s] == ' ' || _buf[s] == '\t')) ++s;
 
-                if (s == limit) {
-                    _readPos = s;
+                if (s >= limit) {
+                    _readPos = limit;
                 }
                 else if (_buf[s] == ':') {
                     _readPos = s + 1;
@@ -225,7 +252,7 @@ public:
                     _readPos = limit;
                 }
                 else {
-                    throw logic_error("format error - expecting key-value-separator");
+                    throw exception("format error - expecting key-value-separator");
                 }
                 
                 break;
@@ -234,11 +261,11 @@ public:
                 break;
             }
             case STATE_DICT_POST_VALUE: {
-                int s = _readPos;
-                while (s < limit && _buf[s] != ' ' && _buf[s] != '\t') ++s;
+                size_t s = _readPos;
+                while (s < limit && (_buf[s] == ' ' || _buf[s] == '\t')) ++s;
 
-                if (s == limit) {
-                    _readPos = s;
+                if (s >= limit) {
+                    _readPos = limit;
                 }
                 else if (_buf[s] == '"' || !IS_SPECIAL_CHAR(_buf[s])) {
                     _stateStack.back() = STATE_DICT_PRE_KEY;
@@ -256,17 +283,17 @@ public:
                     _readPos = limit;
                 }
                 else {
-                    throw logic_error("format error in dict");
+                    throw exception("format error in dict");
                 }
                 
                 break;
             }
             case STATE_LIST: {
-                int s = _readPos;
-                while (s < limit && _buf[s] != ' ' && _buf[s] != '\t') ++s;
-                
-                if (s == limit) {
-                    _readPos = s;
+                size_t s = _readPos;
+                while (s < limit && (_buf[s] == ' ' || _buf[s] == '\t')) ++s;
+
+                if (s >= limit) {
+                    _readPos = limit;
                 }
                 else if (_buf[s] == ']') {
                     _stateStack.back() = STATE_ELEMENT_END;
@@ -281,14 +308,14 @@ public:
                 }
                 else {
                     _readPos = s;
-                    _stateStack.push_back(STATE_ELEMENT_STARRT);
+                    _stateStack.push_back(STATE_ELEMENT_START);
                 }
                 
                 break;
             }
             case STATE_ELEMENT_START: {
-                int s = _readPos;
-                while (s < limit && _buf[s] != ' ' && _buf[s] != '\t') ++s;
+                size_t s = _readPos;
+                while (s < limit && (_buf[s] == ' ' || _buf[s] == '\t')) ++s;
 
                 if (s >= limit) {
                     _readPos = limit;
@@ -300,7 +327,7 @@ public:
                 }
                 else if (_buf[s] == '[') {
                     _valueStack.push_back(new ListData());
-                    _stackStack.back() = STATE_LIST;
+                    _stateStack.back() = STATE_LIST;
                     _readPos = s + 1;
                 }
                 else if (_buf[s] == '"') {
@@ -319,7 +346,14 @@ public:
                     _readPos = limit;
                 }
                 else {
+                    size_t e = s;
+                    while (e < limit && !IS_SPECIAL_CHAR(_buf[e])) ++e;
                     
+                    auto v = new StringData(false);
+                    v->value.assign(_buf, s, e - s);
+                    _valueStack.push_back(v);
+                    _stateStack.back() = STATE_ELEMENT_END;
+                    _readPos = e;
                 }
                 
                 break;
@@ -327,4 +361,67 @@ public:
             }
         }
     }
+
+    IData * Extract() override {
+        if ((_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) &&
+            _valueStack.size() == 1) {
+
+            IData * ret = _valueStack.back();
+            _valueStack.pop_back();
+            return ret;
+        }
+        else {
+            return nullptr;
+        }
+    }
 };
+
+IParser * simpleon::CreateSimpleONParser() {
+    return new SimpleONParser();
+}
+
+void simpleon::Dump(ostream & o, IData * d) {
+    if (d == nullptr) {
+        o << "(Null)";
+        return;
+    }
+
+    switch (d->GetType()) {
+    case IData::T_BOOL:
+        o << d->GetBool();
+        break;
+    case IData::T_INT:
+        o << d->GetInt();
+        break;
+    case IData::T_FLOAT:
+        o << d->GetFloat();
+        break;
+    case IData::T_STRING:
+    case IData::T_UQ_STRING:
+        o << quoted(d->GetString());
+        break;
+    case IData::T_LIST: {
+        o << '[';
+        bool first = true;
+        for (IData * ele : d->GetList()) {
+            if (first) first = false;
+            else o << ',';
+            Dump(o, ele);
+        }
+        o << ']';
+        break;
+    }
+    case IData::T_DICT: {
+        o << '{';
+        bool first = true;
+        for (auto && kv : d->GetDict()) {
+            if (first) first = false;
+            else o << ',';
+            o << quoted(kv.first) << ':';
+            Dump(o, kv.second);
+        }
+        o << '}';
+        break;
+    }
+    }
+}

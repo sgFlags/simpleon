@@ -4,6 +4,7 @@
 #include <string>
 #include <list>
 #include <map>
+#include <iostream>
 
 namespace simpleon {
     class IData {
@@ -36,6 +37,7 @@ namespace simpleon {
     };
 
     IParser * CreateSimpleONParser();
+    void Dump(std::ostream & o, IData * d);
 }
 
 #endif
