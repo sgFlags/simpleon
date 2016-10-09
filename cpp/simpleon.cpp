@@ -32,7 +32,7 @@ public:
     bool GetBool() override { return value; } 
 };
 
-class DoubleData : public IData {
+class FloatData : public IData {
 public:
     double value;
     Type GetType() override { return T_FLOAT; }
@@ -66,7 +66,21 @@ public:
 ParseException::ParseException(const char * w) : _what(w) { }
 const char * ParseException::what() const noexcept { return _what.c_str(); }
 
-#define IS_SPECIAL_CHAR(c) ((c) == ' ' || (c) == '\t' || (c) == '[' || (c) == ']' || (c) == '{' || (c) == '}' || (c) == ':' || (c) == '"' || (c) == ',' || (c) == '#')
+struct CharMap {
+    bool m[256];
+
+    CharMap(const char * v) {
+        for (int i = 0; i < 256; ++i) m[i] = false;
+        for (; *v; ++v) {
+            m[*v] = true;
+        }
+    }
+};
+
+static const CharMap SPECIAL_CHARS(" \t[]{}:\",#");
+static const CharMap NUM_CHARS("+-.0123456789");
+
+#define IS_SPECIAL_CHAR(c) (SPECIAL_CHARS.m[c])
 #define BUF_CLEAN_THRESHOLD 4096
 
 class SimpleONParser : public IParser {
@@ -86,8 +100,8 @@ private:
         STATE_MULTILINE_STRING
     };
     
-    string _buf;
-    size_t _readPos;
+    string          _buf;
+    size_t          _readPos;
     vector<string>  _keyStack;
     vector<IData *> _valueStack;
     vector<State>   _stateStack;
@@ -130,6 +144,58 @@ public:
     }
 
     void HandleUnquotedString(size_t s, size_t e) {
+        string word(_buf, s, e - s);
+        if (NUM_CHARS.m[_buf[s]]) {
+            int vint;
+            bool succ = true;
+            size_t idx;
+            
+            try {
+                vint = stoi(word, &idx);
+                if (idx != e - s) succ = false;
+            }
+            catch (const exception &) {
+                succ = false;
+            }
+
+            if (succ) {
+                auto v = new IntData();
+                v->value = vint;
+                _valueStack.push_back(v);
+                return;
+            }
+
+            double dint;
+            succ = true;
+
+            try {
+                dint = stod(word, &idx);
+                if (idx != e - s) succ = false;
+            }
+            catch (const exception &) {
+                succ = false;
+            }
+
+            if (succ) {
+                auto v = new FloatData();
+                v->value = dint;
+                _valueStack.push_back(v);
+                return;
+            }
+        }
+        else if (word[0] == 't' && word == "true") {
+            auto v = new BoolData();
+            v->value = true;
+            _valueStack.push_back(v);
+            return;
+        }
+        else if (word[0] == 'f' && word == "false") {
+            auto v = new BoolData();
+            v->value = false;
+            _valueStack.push_back(v);
+            return;
+        }
+
         auto v = new StringData(false);
         v->value.assign(_buf, s, e - s);
         _valueStack.push_back(v);

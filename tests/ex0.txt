@@ -1,4 +1,7 @@
 {
   foo : bar
   answer : 42
+  good : true
+  bad : false
+  float : 0.314e1
 }
