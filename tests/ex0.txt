@@ -4,4 +4,5 @@
   good : true
   bad : false
   float : 0.314e1
+  list : [ bar 42 true false 1234.5e10 ]
 }
