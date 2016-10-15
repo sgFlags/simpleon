@@ -136,9 +136,20 @@ public:
             value += '\r';
             ++_readPos;
             break;
-        default:
+        case 'f':
+            value += '\f';
+            ++_readPos;
+            break;
+        case 'u':
+            // TODO - handle unicode escape
+            break;
+        case '/':
+        case '\\':
+        case '"':
             value += _buf[_readPos];
             ++_readPos;
+            break;
+        default:
             break;
         }
     }
