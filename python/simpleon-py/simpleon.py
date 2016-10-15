@@ -12,13 +12,14 @@ def default_token_handler(s):
         except ValueError:
             pass
 
-    if s[0] == "t":
-        if s == "true":
-            return True
+    if s[0] == "t" and s == "true":
+        return True
 
-    if s[0] == "f":
-        if s == "false":
-            return False
+    if s[0] == "f" and s == "false":
+        return False
+    
+    if s[0] == "n" and s == "null":
+        return None
 
     return s
 
@@ -52,7 +53,7 @@ class SimpleONParser:
     COMMENT_CHAR_RE = re.compile(r'#')
     QUOTED_STRING_SPECIAL_RE = re.compile(r'[\\"]')
     MULTILINE_STRING_SPECIAL_RE = re.compile(r'\\|"""')
-    UNQUOTED_RE = re.compile(r'[^\[\]{}:",]+')
+    UNQUOTED_RE = re.compile(r'[^\[\]{}:", ]+')
     DICT_KEY_VALUE_SEP_RE = re.compile(":")
     ITEM_SEP_RE = re.compile(",")
     NON_WHITESPACE_RE = re.compile(r'[^ \t]')
@@ -110,7 +111,33 @@ class SimpleONParser:
     def parse_line(self, line):
         self.buf += line
         self.parse_buf()
-
+        
+    def handle_escape(self):
+        start_c = self.buf[self.buf_read_pos]
+        if start_c == 'n':
+            self.value_set(self.value_get() + '\n')
+            self.buf_read_pos += 1
+            pass
+        elif start_c == 't':
+            self.value_set(self.value_get() + '\t')
+            self.buf_read_pos += 1
+            pass
+        elif start_c == 'b':
+            self.value_set(self.value_get() + '\b')
+            self.buf_read_pos += 1
+            pass
+        elif start_c == 'f':
+            self.value_set(self.value_get() + '\f')
+            self.buf_read_pos += 1
+            pass
+        elif start_c == 'u':
+            # TODO
+            pass
+        elif start_c == '"' or start_c == '\\' or start_c == '/':
+            self.value_set(self.value_get() + start_c)
+        else:
+            pass
+        
     def parse_buf(self):
         while len(self.buf) > self.buf_read_pos:
 
@@ -151,12 +178,9 @@ class SimpleONParser:
                 else:
                     current += self.buf[read_pos:m.start(0)]
                     if self.buf[m.start(0)] == "\\":
-                        if len(self.buf) > m.start(0) + 1:
-                            # TODO have special processing of escaping
-                            current += self.buf[m.start(0) + 1]
-                            read_pos = m.start(0) + 2
-                        else:
-                            read_pos = m.start(0) + 1
+                        self.buf_read_pos = m.start(0) + 1
+                        self.handle_escape()
+                        continue
                     elif self.buf[m.start(0)] == '"':
                         # the string is ended
                         read_pos = m.start(0) + 1 
@@ -172,12 +196,9 @@ class SimpleONParser:
                 else:
                     current += self.buf[read_pos:m.start(0)]
                     if self.buf[m.start(0)] == "\\":
-                        if len(self.buf) > m.start(0) + 1:
-                            # TODO have special processing of escaping
-                            current += self.buf[m.start(0) + 1]
-                            read_pos = m.start(0) + 2
-                        else:
-                            read_pos = m.start(0) + 1
+                        self.buf_read_pos = m.start(0) + 1
+                        self.handle_escape()
+                        continue
                     elif self.buf[m.start(0):m.start(0) + 3] == '"""':
                         # the string is ended
                         read_pos = m.start(0) + 3

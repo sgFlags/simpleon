@@ -11,6 +11,7 @@ namespace simpleon {
     class IData {
     public:
         enum Type {
+            T_NULL,
             T_BOOL,
             T_INT,
             T_FLOAT,

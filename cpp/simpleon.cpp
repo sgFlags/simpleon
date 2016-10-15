@@ -18,6 +18,11 @@ const string & IData::GetString() { return IData_DUMMY_STRING; }
 const list<IData *> & IData::GetList() { return IData_DUMMY_LIST; }
 const map<string, IData *> & IData::GetDict() { return IData_DUMMY_MAP; }
 
+class NullData : public IData {
+public:
+    Type GetType() override { return T_NULL; }
+};
+
 class IntData : public IData {
 public:
     int value;
@@ -193,6 +198,11 @@ public:
                 _valueStack.push_back(v);
                 return;
             }
+        }
+        else if (word[0] == 'n' && word == "null") {
+            auto v = new NullData();
+            _valueStack.push_back(v);
+            return;
         }
         else if (word[0] == 't' && word == "true") {
             auto v = new BoolData();
@@ -482,8 +492,11 @@ void simpleon::Dump(ostream & o, IData * d) {
     }
 
     switch (d->GetType()) {
+    case IData::T_NULL:
+        o << "null";
+        break;
     case IData::T_BOOL:
-        o << d->GetBool();
+        o << d->GetBool() ? "true" : "false";
         break;
     case IData::T_INT:
         o << d->GetInt();
