@@ -53,7 +53,7 @@ class SimpleONParser:
     COMMENT_CHAR_RE = re.compile(r'#')
     QUOTED_STRING_SPECIAL_RE = re.compile(r'[\\"]')
     MULTILINE_STRING_SPECIAL_RE = re.compile(r'\\|"""')
-    UNQUOTED_RE = re.compile(r'[^\[\]{}:", ]+')
+    UNQUOTED_RE = re.compile(r'[^\[\]{}:", \t]+')
     DICT_KEY_VALUE_SEP_RE = re.compile(":")
     ITEM_SEP_RE = re.compile(",")
     NON_WHITESPACE_RE = re.compile(r'[^ \t]')

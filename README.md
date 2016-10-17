@@ -8,7 +8,7 @@ Almost JSON, with certain exceptions:
 
 1. Item separator (i.e. comma) is optional. Key-value separator (i.e. colon) is still required.
 
-2. Unquoted string is allowed. RE: r'[^\[\]{}:", ]+'.
+2. Unquoted string is allowed. RE: r'[^\[\]{}:", \t]+'.
 
     Integers, floats, and booleans (true and false) will be auto-converted.
 
