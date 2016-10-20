@@ -71,19 +71,33 @@ public:
 ParseException::ParseException(const char * w) : _what(w) { }
 const char * ParseException::what() const noexcept { return _what.c_str(); }
 
+template<typename I>
 struct CharMap {
-    bool m[256];
+    I m[256];
 
-    CharMap(const char * v) {
-        for (int i = 0; i < 256; ++i) m[i] = false;
-        for (; *v; ++v) {
-            m[*v] = true;
+    CharMap(const char * v, I defaultValue, I setValue) {
+        for (int i = 0; i < 256; ++i) m[i] = defaultValue;
+        while (*v) {
+            m[*v] = setValue;
+            ++v;
+        }
+    }
+
+    CharMap(const char * v, I defaultValue, const initializer_list<I> & l) {
+        for (int i = 0; i < 256; ++i) m[i] = defaultValue;
+        auto it = begin(l);
+        while (*v && it != end(l)) {
+            m[*v] = *it;
+            ++v; ++it;
         }
     }
 };
 
-static const CharMap SPECIAL_CHARS(" \t[]{}:\",#");
-static const CharMap NUM_CHARS("+-.0123456789");
+static const CharMap<bool> SPECIAL_CHARS(" \t[]{}:\",#", false, true);
+static const CharMap<bool> NUM_CHARS("+-.0123456789", false, true);
+static const CharMap<int> HEX_TRANSLATE("0123456789abcdefABCDEF", -1,
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 10, 11, 12, 13, 14, 15}
+);
 
 #define IS_SPECIAL_CHAR(c) (SPECIAL_CHARS.m[c])
 #define BUF_CLEAN_THRESHOLD 4096
@@ -145,9 +159,44 @@ public:
             value += '\f';
             ++_readPos;
             break;
-        case 'u':
-            // TODO - handle unicode escape
+        case 'u': {
+            wchar_t wc;
+            int digit;
+
+            if (_readPos + 4 >= _buf.size()) goto InputError;
+            ++_readPos;
+            digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
+            wc = digit; ++_readPos;
+            digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
+            wc = (wc << 4) + digit; ++_readPos;
+            digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
+            wc = (wc << 4) + digit; ++_readPos;
+            digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
+            wc = (wc << 4) + digit; ++_readPos;
+            // debugging ...
+            // fprintf(stderr, "got hex %04x\n", wc);
+
+            mbstate_t mbs;
+            size_t mb_buf_size = MB_CUR_MAX;
+            char * mb_buf = (char *)alloca(mb_buf_size);
+
+            mbrlen(NULL, 0, &mbs);
+            size_t ret;
+            ret = wcrtomb(mb_buf, wc, &mbs);
+            // wcrtomb_s(&ret, mb_buf, mb_buf_size, wc, &mbs);
+            if (ret <= 0 || ret > mb_buf_size) goto ConvertError;
+
+            value.append(mb_buf, ret);
+            
             break;
+
+        InputError:
+            throw ParseException("Expect hex chars for unicode escape");
+        ConvertError:
+            break;
+            // For now we silently ignore convert errors ...
+            // throw ParseException("Cannot convert the code point");
+        }
         case '/':
         case '\\':
         case '"':

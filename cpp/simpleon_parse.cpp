@@ -15,8 +15,9 @@ int main() {
             parser->ParseLine(line);
         }
         catch (const ParseException & e) {
-            cerr << "Parsing error at line" << line_num << ": " << e.what() << endl;
+            cerr << "Parsing error at line " << line_num << ": " << e.what() << endl;
         }
+        ++line_num;
     }
 
     Dump(cout, parser->Extract());
