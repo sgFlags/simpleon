@@ -159,7 +159,10 @@ public:
             value += '\f';
             ++_readPos;
             break;
-        case 'u': {
+        case 'u':
+            value += '\\';
+#if 0
+        {
             wchar_t wc;
             int digit;
 
@@ -197,6 +200,7 @@ public:
             // For now we silently ignore convert errors ...
             // throw ParseException("Cannot convert the code point");
         }
+#endif
         case '/':
         case '\\':
         case '"':

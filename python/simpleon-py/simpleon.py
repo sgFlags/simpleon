@@ -131,7 +131,8 @@ class SimpleONParser:
             self.buf_read_pos += 1
             pass
         elif start_c == 'u':
-            # TODO
+            self.value_set(self.value_get() + r'\u')
+            self.buf_read_pos += 1
             pass
         elif start_c == '"' or start_c == '\\' or start_c == '/':
             self.value_set(self.value_get() + start_c)
@@ -178,6 +179,7 @@ class SimpleONParser:
                 else:
                     current += self.buf[read_pos:m.start(0)]
                     if self.buf[m.start(0)] == "\\":
+                        self.value_set(current)
                         self.buf_read_pos = m.start(0) + 1
                         self.handle_escape()
                         continue
@@ -196,6 +198,7 @@ class SimpleONParser:
                 else:
                     current += self.buf[read_pos:m.start(0)]
                     if self.buf[m.start(0)] == "\\":
+                        self.value_set(current)
                         self.buf_read_pos = m.start(0) + 1
                         self.handle_escape()
                         continue
