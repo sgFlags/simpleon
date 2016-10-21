@@ -53,8 +53,6 @@ Generally the project is in very early stage.
 
 Slash escaping in strings is WIP.
 
-C++ parser is WIP.
-
 ## License
 
 MIT License - See LICENSE

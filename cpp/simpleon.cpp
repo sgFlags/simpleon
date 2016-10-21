@@ -159,9 +159,8 @@ public:
             value += '\f';
             ++_readPos;
             break;
-        case 'u':
-            value += '\\';
 #if 0
+        case 'u':
         {
             wchar_t wc;
             int digit;
@@ -208,6 +207,7 @@ public:
             ++_readPos;
             break;
         default:
+            value += '\\';
             break;
         }
     }

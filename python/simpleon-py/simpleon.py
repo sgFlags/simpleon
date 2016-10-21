@@ -117,27 +117,20 @@ class SimpleONParser:
         if start_c == 'n':
             self.value_set(self.value_get() + '\n')
             self.buf_read_pos += 1
-            pass
         elif start_c == 't':
             self.value_set(self.value_get() + '\t')
             self.buf_read_pos += 1
-            pass
         elif start_c == 'b':
             self.value_set(self.value_get() + '\b')
             self.buf_read_pos += 1
-            pass
         elif start_c == 'f':
             self.value_set(self.value_get() + '\f')
             self.buf_read_pos += 1
-            pass
-        elif start_c == 'u':
-            self.value_set(self.value_get() + r'\u')
-            self.buf_read_pos += 1
-            pass
         elif start_c == '"' or start_c == '\\' or start_c == '/':
             self.value_set(self.value_get() + start_c)
+            self.buf_read_pos += 1
         else:
-            pass
+            self.value_set(self.value_get() + "\\")
         
     def parse_buf(self):
         while len(self.buf) > self.buf_read_pos:
