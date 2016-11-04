@@ -57,10 +57,10 @@ class LineCommentExtractorPlus:
             return
         
         if self.multiline_level > 0:
-            self.inner_paser.parse_line(line)
+            self.inner_parser.parse_line(line)
             return
         
-        m =  self.line.search(line)
+        m = self.line.search(line)
         if m:
             self.inner_parser.parse_line(line[m.end(0):])
 
