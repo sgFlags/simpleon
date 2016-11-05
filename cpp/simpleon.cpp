@@ -159,47 +159,24 @@ public:
             value += '\f';
             ++_readPos;
             break;
-#if 0
-        case 'u':
+        case 'x':
         {
-            wchar_t wc;
+            unsigned char c;
             int digit;
 
-            if (_readPos + 4 >= _buf.size()) goto InputError;
+            if (_readPos + 2 >= _buf.size()) goto InputError;
             ++_readPos;
             digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
-            wc = digit; ++_readPos;
+            c = digit; ++_readPos;
             digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
-            wc = (wc << 4) + digit; ++_readPos;
-            digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
-            wc = (wc << 4) + digit; ++_readPos;
-            digit = HEX_TRANSLATE.m[_buf[_readPos]]; if (digit < 0) goto InputError;
-            wc = (wc << 4) + digit; ++_readPos;
-            // debugging ...
-            // fprintf(stderr, "got hex %04x\n", wc);
+            c = (c << 4) + digit; ++_readPos;
+            value += c;
 
-            mbstate_t mbs;
-            size_t mb_buf_size = MB_CUR_MAX;
-            char * mb_buf = (char *)alloca(mb_buf_size);
-
-            mbrlen(NULL, 0, &mbs);
-            size_t ret;
-            ret = wcrtomb(mb_buf, wc, &mbs);
-            // wcrtomb_s(&ret, mb_buf, mb_buf_size, wc, &mbs);
-            if (ret <= 0 || ret > mb_buf_size) goto ConvertError;
-
-            value.append(mb_buf, ret);
-            
             break;
 
         InputError:
-            throw ParseException("Expect hex chars for unicode escape");
-        ConvertError:
-            break;
-            // For now we silently ignore convert errors ...
-            // throw ParseException("Cannot convert the code point");
+            throw ParseException("Expect 2 hex chars for utf-8 escape");
         }
-#endif
         case '/':
         case '\\':
         case '"':
