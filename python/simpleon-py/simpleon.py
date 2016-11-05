@@ -159,7 +159,7 @@ class SimpleONParser:
             if state == self.STATE_ELEMENT_END:
                 value = current
                 if isinstance(value, bytearray):
-                    value = value.decode()
+                    value = value.decode("utf-8")
                 self.pop()
 
                 state = self.state_get()
@@ -180,11 +180,11 @@ class SimpleONParser:
             elif state == self.STATE_QUOTED_STRING:
                 m = self.QUOTED_STRING_SPECIAL_RE.search(self.buf, read_pos)
                 if not m:
-                    current.extend(self.buf[read_pos:].encode())
+                    current.extend(self.buf[read_pos:].encode("utf-8"))
                     state = self.STATE_ELEMENT_END
                     read_pos = len(self.buf)
                 else:
-                    current.extend(self.buf[read_pos:m.start(0)].encode())
+                    current.extend(self.buf[read_pos:m.start(0)].encode("utf-8"))
                     if self.buf[m.start(0)] == "\\":
                         self.buf_read_pos = m.start(0) + 1
                         self.handle_escape()
@@ -199,11 +199,11 @@ class SimpleONParser:
             elif state == self.STATE_MULTILINE_STRING:
                 m = self.MULTILINE_STRING_SPECIAL_RE.search(self.buf, read_pos)
                 if not m:
-                    current.extend(self.buf[read_pos:].encode())
+                    current.extend(self.buf[read_pos:].encode("utf-8"))
                     current.extend(b"\n")
                     read_pos = len(self.buf)
                 else:
-                    current.extend(self.buf[read_pos:m.start(0)].encode())
+                    current.extend(self.buf[read_pos:m.start(0)].encode("utf-8"))
                     if self.buf[m.start(0)] == "\\":
                         self.buf_read_pos = m.start(0) + 1
                         self.handle_escape()
