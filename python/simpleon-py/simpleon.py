@@ -1,4 +1,5 @@
 import re
+import struct
 
 def default_token_handler(s):
     if s[0] in "-0123456789.":
@@ -115,32 +116,33 @@ class SimpleONParser:
     def handle_escape(self):
         start_c = self.buf[self.buf_read_pos]
         if start_c == 'n':
-            self.value_set(self.value_get() + '\n')
+            self.value_get().extend(b'\n')
             self.buf_read_pos += 1
         elif start_c == 't':
-            self.value_set(self.value_get() + '\t')
+            self.value_get().extend(b'\t')
             self.buf_read_pos += 1
         elif start_c == 'b':
-            self.value_set(self.value_get() + '\b')
+            self.value_get().extend(b'\b')
             self.buf_read_pos += 1
         elif start_c == 'f':
-            self.value_set(self.value_get() + '\f')
+            self.value_get().extend(b'\f')
             self.buf_read_pos += 1
         elif start_c == 'x':
             if self.buf_read_pos + 2 >= len(self.buf):
                 raise Exception("expect 2 hex chars for utf-8 escaping")
-            hex = self.buf[self.buf_read_pos + 1:2]
+            code_str = self.buf[self.buf_read_pos + 1:self.buf_read_pos + 3]
             try:
-                code = int(hex, 16)
+                code = int(code_str, 16)
             except Exception:
-                raise Exception("expect 2 hex chars for utf-8 escaping (parse {0} failed)".format(hex))
-            self.value_set(self.value_get() + chr(code))
+                raise Exception("expect 2 hex chars for utf-8 escaping (parse {0} failed)".format(code_str))
+            self.value_get().append(code)
             self.buf_read_pos += 3
         elif start_c == '"' or start_c == '\\' or start_c == '/':
-            self.value_set(self.value_get() + start_c)
+            self.value_get().append(ord(start_c))
             self.buf_read_pos += 1
         else:
-            self.value_set(self.value_get() + "\\")
+            self.value_get().extend(b"\\")
+            self.value_get().append(ord(start_c))
         
     def parse_buf(self):
         while len(self.buf) > self.buf_read_pos:
@@ -156,6 +158,8 @@ class SimpleONParser:
 
             if state == self.STATE_ELEMENT_END:
                 value = current
+                if isinstance(value, bytearray):
+                    value = value.decode()
                 self.pop()
 
                 state = self.state_get()
@@ -176,13 +180,12 @@ class SimpleONParser:
             elif state == self.STATE_QUOTED_STRING:
                 m = self.QUOTED_STRING_SPECIAL_RE.search(self.buf, read_pos)
                 if not m:
-                    current += self.buf[read_pos:]
+                    current.extend(self.buf[read_pos:].encode())
                     state = self.STATE_ELEMENT_END
                     read_pos = len(self.buf)
                 else:
-                    current += self.buf[read_pos:m.start(0)]
+                    current.extend(self.buf[read_pos:m.start(0)].encode())
                     if self.buf[m.start(0)] == "\\":
-                        self.value_set(current)
                         self.buf_read_pos = m.start(0) + 1
                         self.handle_escape()
                         continue
@@ -196,12 +199,12 @@ class SimpleONParser:
             elif state == self.STATE_MULTILINE_STRING:
                 m = self.MULTILINE_STRING_SPECIAL_RE.search(self.buf, read_pos)
                 if not m:
-                    current += self.buf[read_pos:] + "\n"
+                    current.extend(self.buf[read_pos:].encode())
+                    current.extend(b"\n")
                     read_pos = len(self.buf)
                 else:
-                    current += self.buf[read_pos:m.start(0)]
+                    current.extend(self.buf[read_pos:m.start(0)].encode())
                     if self.buf[m.start(0)] == "\\":
-                        self.value_set(current)
                         self.buf_read_pos = m.start(0) + 1
                         self.handle_escape()
                         continue
@@ -299,7 +302,7 @@ class SimpleONParser:
                     state = self.STATE_LIST
                     read_pos = m.start(0) + 1
                 elif self.buf[m.start(0)] == '"':
-                    current = ""
+                    current = bytearray()
                     if self.buf[m.start(0):m.start(0) + 3] == '"""':
                         state = self.STATE_MULTILINE_STRING
                         read_pos = m.start(0) + 3
