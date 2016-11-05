@@ -132,7 +132,7 @@ class SimpleONParser:
             try:
                 code = int(self.buf[self.buf_read_pos + 1:2], 16)
             except Exception:
-                raise Exception("expect 2 hex chars for utf-8 escaping")
+                raise Exception("expect 2 hex chars for utf-8 escaping (parse failed)")
             self.value_set(self.value_get() + chr(code))
             self.buf_read_pos += 3
         elif start_c == '"' or start_c == '\\' or start_c == '/':
