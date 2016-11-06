@@ -292,8 +292,7 @@ class SimpleONParser:
                 m = self.NON_WHITESPACE_RE.search(self.buf, read_pos)
                 if not m:
                     self.buf_read_pos = len(self.buf)
-
-                if self.buf[m.start(0)] == "{":
+                elif self.buf[m.start(0)] == "{":
                     current = dict()
                     state = self.STATE_DICT_PRE_KEY
                     read_pos = m.start(0) + 1
