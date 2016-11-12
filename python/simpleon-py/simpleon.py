@@ -62,12 +62,14 @@ class SimpleONParser:
     BUF_CLEAN_SIZE = 4096
     
     def __init__(self, token_handler = default_token_handler):
+        self.reset(token_handler)
+        
+    def reset(self, token_handler = default_token_handler):
         self.state_stack = [ self.STATE_ELEMENT_START ];
         self.value_stack = [ None ];
         self.buf = ""
         self.buf_read_pos = 0
         self.token_handler = token_handler
-        pass
 
     def state_get(self):
         if len(self.state_stack) == 0:
@@ -103,6 +105,7 @@ class SimpleONParser:
 
     def parse(self, s):
         self.parse_lines(s.splitlines())
+        return self.extract()
 
     def parse_lines(self, lines):
         for line in lines:
@@ -145,6 +148,11 @@ class SimpleONParser:
             self.value_get().append(ord(start_c))
         
     def parse_buf(self):
+        if len(self.state_stack) == 0:
+            self.buf = ""
+            self.buf_read_pos = 0
+            return
+            
         while len(self.buf) > self.buf_read_pos:
 
             if self.buf_read_pos > self.BUF_CLEAN_SIZE:
