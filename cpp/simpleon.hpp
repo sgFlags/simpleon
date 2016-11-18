@@ -34,6 +34,7 @@ namespace simpleon {
     class IParser {
     public:
         virtual void ParseLine(const std::string & line) = 0;
+        virtual void Seal() = 0;
         virtual IData * Extract() = 0;
         virtual ~IParser() = default;
     };
@@ -46,7 +47,7 @@ namespace simpleon {
         const char * what() const noexcept override;
     };
 
-    IParser * CreateSimpleONParser(bool convert = true);
+    IParser * CreateSimpleONParser(bool convert = true, bool multi = true);
     void Dump(std::ostream & o, IData * d);
 }
 

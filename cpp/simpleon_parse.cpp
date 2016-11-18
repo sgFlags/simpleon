@@ -6,22 +6,39 @@ using namespace simpleon;
 using namespace std;
 
 int main() {
-    IParser * parser = CreateSimpleONParser();
+    IParser * parser = CreateSimpleONParser(true, false);
 
     string line;
     int line_num = 1;
-    while (getline(cin, line)) {
+    bool succ;
+    while (true) {
+        succ = !!getline(cin, line);
         try {
-            parser->ParseLine(line);
+            if (succ) {
+                parser->ParseLine(line);
+            }
+            else {
+                parser->Seal();
+            }
         }
         catch (const ParseException & e) {
-            cerr << "Parsing error at line " << line_num << ": " << e.what() << endl;
+            if (succ) {
+                cerr << "Parsing error at line " << line_num << ": " << e.what() << endl;
+            }
+            else {
+                cerr << "Parsing error when sealing: " << e.what() << endl;
+            }
         }
+
+        if (succ) break;
         ++line_num;
     }
 
-    Dump(cout, parser->Extract());
-    cout << endl;
-
+    while (true) {
+        auto v = parser->Extract();
+        if (v == nullptr) break;
+        Dump(cout, v); cout << endl;
+    }
+    
     return 0;
 }

@@ -1,7 +1,7 @@
 #include "simpleon.hpp"
 #include <vector>
 #include <iostream>
-#include <bitset>
+#include <deque>
 #include <iomanip>
 
 using namespace simpleon;
@@ -59,6 +59,10 @@ public:
     list<IData *> value;
     Type GetType() override { return T_LIST; }
     const list<IData *> & GetList() override { return value; }
+    ~ListData() override {
+        for (auto d : value)
+            delete d;
+    }
 };
 
 class DictData : public IData {
@@ -66,6 +70,10 @@ public:
     map<string, IData *> value;
     Type GetType() override { return T_DICT; }
     const map<string, IData *> & GetDict() override { return value; }
+    ~DictData() override {
+        for (auto && kv : value)
+            delete kv.second;
+    }
 };
 
 ParseException::ParseException(const char * w) : _what(w) { }
@@ -120,25 +128,52 @@ private:
     };
     
     bool            _convert;
+    bool            _multi;
+    bool            _sealed;
     string          _buf;
     size_t          _readPos;
     vector<string>  _keyStack;
     vector<IData *> _valueStack;
     vector<State>   _stateStack;
+    deque<IData *>  _results;
     
 public:
 
-    SimpleONParser(bool convert) {
+    SimpleONParser(bool convert, bool multi) {
         _convert = convert;
+        _multi = multi;
+        _sealed = false;
         _readPos = 0;
         _stateStack.push_back(STATE_ELEMENT_START);
     }
     
-    void ParseLine(const string & line) {
-        if (_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) return;
-        
+    void ParseLine(const string & line) override {
+        if (_sealed) return;
+
         _buf.append(line);
         ParseBuf();
+    }
+
+    void Seal() override {
+        if (_sealed) return;
+
+        _sealed = true;
+        ParseBuf();
+
+        _readPos = 0;
+        _buf.clear();
+        _stateStack.clear();
+        for (auto d : _valueStack) {
+            delete d;
+        }
+        _valueStack.clear();
+    }
+
+    ~SimpleONParser() {
+        Seal();
+        for (auto d : _results) {
+            delete d;
+        }
     }
 
     void HandleEscape() {
@@ -265,13 +300,11 @@ public:
     }
 
     void ParseBuf() {
-        if (_stateStack.size() == 0) return;
-
         size_t limit = _buf.size();
         while (_readPos < limit) {
-
             if (_stateStack.size() == 0) {
-                throw ParseException("invalid state to parse more content");
+                Seal();
+                return;
             }
 
             auto state = _stateStack.back();
@@ -281,13 +314,23 @@ public:
                 auto value = _valueStack.back();
                 
                 _stateStack.pop_back();
-                if (_stateStack.size() == 0) break;
+                if (_stateStack.size() == 0) {
+                    _results.push_back(value);
+                    _valueStack.pop_back();
+
+                    if (_multi) {
+                        _stateStack.push_back(STATE_ELEMENT_START);
+                    }
+
+                    break;
+                }
                 _valueStack.pop_back();
                 
                 switch (_stateStack.back()) {
                 case STATE_DICT_KEY:
                     _stateStack.back() = STATE_DICT_POST_KEY;
                     _keyStack.push_back(value->GetString());
+                    delete value;
                     break;
                     
                 case STATE_DICT_VALUE:
@@ -513,12 +556,10 @@ public:
     }
     
     IData * Extract() override {
-        if ((_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) &&
-            _valueStack.size() == 1) {
-
-            IData * ret = _valueStack.back();
-            _valueStack.pop_back();
-            return ret;
+        if (_results.size() > 0) {
+            auto v = _results.front();
+            _results.pop_front();
+            return v;
         }
         else {
             return nullptr;
@@ -526,8 +567,8 @@ public:
     }
 };
 
-IParser * simpleon::CreateSimpleONParser(bool convert) {
-    return new SimpleONParser(convert);
+IParser * simpleon::CreateSimpleONParser(bool convert, bool multi) {
+    return new SimpleONParser(convert, multi);
 }
 
 void simpleon::Dump(ostream & o, IData * d) {
