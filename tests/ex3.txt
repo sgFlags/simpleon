@@ -1,4 +1,7 @@
+{
 # a tail space after colon
-{ foo : 
+foo : 
 bar
+# number as index
+1:2
 }

@@ -328,7 +328,9 @@ class SimpleONParser:
                         current = self.buf[m_end.start(0):m_end.end(0)]
                         state = self.STATE_ELEMENT_END
                         read_pos = m_end.end(0)
-                    current = self.token_handler(current)
+                    if len(self.state_stack) <= 1 or \
+                        self.state_stack[len(self.state_stack) - 2] != self.STATE_DICT_KEY:
+                        current = self.token_handler(current)
                 else:
                     raise Exception("format error in parsing general element")
 

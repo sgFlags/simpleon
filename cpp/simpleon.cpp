@@ -119,6 +119,7 @@ private:
         STATE_MULTILINE_STRING
     };
     
+    bool            _convert;
     string          _buf;
     size_t          _readPos;
     vector<string>  _keyStack;
@@ -127,7 +128,8 @@ private:
     
 public:
 
-    SimpleONParser() {
+    SimpleONParser(bool convert) {
+        _convert = convert;
         _readPos = 0;
         _stateStack.push_back(STATE_ELEMENT_START);
     }
@@ -189,62 +191,64 @@ public:
         }
     }
 
-    void HandleUnquotedString(size_t s, size_t e) {
-        string word(_buf, s, e - s);
-        if (NUM_CHARS.m[_buf[s]]) {
-            int vint;
-            bool succ = true;
-            size_t idx;
-            
-            try {
-                vint = stoi(word, &idx);
-                if (idx != e - s) succ = false;
-            }
-            catch (const exception &) {
-                succ = false;
-            }
+    void HandleUnquotedString(size_t s, size_t e, bool convert) {
+        if (convert) {
+            string word(_buf, s, e - s);
+            if (NUM_CHARS.m[_buf[s]]) {
+                int vint;
+                bool succ = true;
+                size_t idx;
 
-            if (succ) {
-                auto v = new IntData();
-                v->value = vint;
+                try {
+                    vint = stoi(word, &idx);
+                    if (idx != e - s) succ = false;
+                }
+                catch (const exception &) {
+                    succ = false;
+                }
+
+                if (succ) {
+                    auto v = new IntData();
+                    v->value = vint;
+                    _valueStack.push_back(v);
+                    return;
+                }
+
+                double dint;
+                succ = true;
+
+                try {
+                    dint = stod(word, &idx);
+                    if (idx != e - s) succ = false;
+                }
+                catch (const exception &) {
+                    succ = false;
+                }
+
+                if (succ) {
+                    auto v = new FloatData();
+                    v->value = dint;
+                    _valueStack.push_back(v);
+                    return;
+                }
+            }
+            else if (word[0] == 'n' && word == "null") {
+                auto v = new NullData();
                 _valueStack.push_back(v);
                 return;
             }
-
-            double dint;
-            succ = true;
-
-            try {
-                dint = stod(word, &idx);
-                if (idx != e - s) succ = false;
-            }
-            catch (const exception &) {
-                succ = false;
-            }
-
-            if (succ) {
-                auto v = new FloatData();
-                v->value = dint;
+            else if (word[0] == 't' && word == "true") {
+                auto v = new BoolData();
+                v->value = true;
                 _valueStack.push_back(v);
                 return;
             }
-        }
-        else if (word[0] == 'n' && word == "null") {
-            auto v = new NullData();
-            _valueStack.push_back(v);
-            return;
-        }
-        else if (word[0] == 't' && word == "true") {
-            auto v = new BoolData();
-            v->value = true;
-            _valueStack.push_back(v);
-            return;
-        }
-        else if (word[0] == 'f' && word == "false") {
-            auto v = new BoolData();
-            v->value = false;
-            _valueStack.push_back(v);
-            return;
+            else if (word[0] == 'f' && word == "false") {
+                auto v = new BoolData();
+                v->value = false;
+                _valueStack.push_back(v);
+                return;
+            }
         }
 
         auto v = new StringData(false);
@@ -261,9 +265,14 @@ public:
     }
 
     void ParseBuf() {
-        if (_stateStack.size() == 0 || _stateStack[0] == STATE_ELEMENT_END) return;
+        if (_stateStack.size() == 0) return;
+
         size_t limit = _buf.size();
         while (_readPos < limit) {
+
+            if (_stateStack.size() == 0) {
+                throw ParseException("invalid state to parse more content");
+            }
 
             auto state = _stateStack.back();
             
@@ -484,7 +493,13 @@ public:
                     size_t e = s;
                     while (e < limit && !IS_SPECIAL_CHAR(_buf[e])) ++e;
 
-                    HandleUnquotedString(s, e);
+                    if (_stateStack.size() > 1 && _stateStack[_stateStack.size() - 2] == STATE_DICT_KEY) {
+                        HandleUnquotedString(s, e, false);
+                    }
+                    else {
+                        HandleUnquotedString(s, e, _convert);
+                    }
+
                     _stateStack.back() = STATE_ELEMENT_END;
                     _readPos = e;
                 }
@@ -511,8 +526,8 @@ public:
     }
 };
 
-IParser * simpleon::CreateSimpleONParser() {
-    return new SimpleONParser();
+IParser * simpleon::CreateSimpleONParser(bool convert) {
+    return new SimpleONParser(convert);
 }
 
 void simpleon::Dump(ostream & o, IData * d) {
