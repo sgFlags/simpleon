@@ -1,5 +1,6 @@
 import re
 import struct
+from collections import deque
 
 def default_token_handler(s):
     if s[0] in "-0123456789.":
@@ -23,6 +24,9 @@ def default_token_handler(s):
         return None
 
     return s
+    
+class ParseException(Exception):
+    pass
 
 class SimpleONParser:
 
@@ -61,45 +65,55 @@ class SimpleONParser:
 
     BUF_CLEAN_SIZE = 4096
     
-    def __init__(self, token_handler = default_token_handler):
-        self.reset(token_handler)
+    def __init__(self, multi = True, to_convert = True, token_handler = default_token_handler):
+        self.reset(multi, to_convert, token_handler)
         
-    def reset(self, token_handler = default_token_handler):
+    def reset(self, multi = True, to_convert = True, token_handler = default_token_handler):
+        self.sealed = False
+        self.multi = multi
+        self.to_convert = to_convert
         self.state_stack = [ self.STATE_ELEMENT_START ];
         self.value_stack = [ None ];
         self.buf = ""
         self.buf_read_pos = 0
         self.token_handler = token_handler
-
+        self.values = deque()
+    
+    def seal(self):
+        if self.sealed:
+            return
+        self.sealed = True
+        self.state_stack = [ ];
+        self.value_stack = [ ];
+        self.buf = ""
+    
     def state_get(self):
         if len(self.state_stack) == 0:
-            raise Exception("stack is empty")
+            raise ParseException("stack is empty")
         return self.state_stack[len(self.state_stack) - 1]
 
     def state_set(self, state):
         if len(self.state_stack) == 0:
-            raise Exception("stack is empty")
+            raise ParseException("stack is empty")
         self.state_stack[len(self.state_stack) - 1] = state
 
     def value_get(self):
         if len(self.value_stack) == 0:
-            raise Exception("stack is empty")
+            raise ParseException("stack is empty")
         return self.value_stack[len(self.value_stack) - 1]
 
     def value_set(self, value):
         if len(self.value_stack) == 0:
-            raise Exception("stack is empty")
+            raise ParseException("stack is empty")
         self.value_stack[len(self.value_stack) - 1] = value
 
     def pop(self):
         if len(self.state_stack) == 0:
-            raise Exception("stack is empty")
+            raise ParseException("stack is empty")
         self.state_stack.pop()
         self.value_stack.pop()
 
     def push(self, state, value):
-        if len(self.state_stack) == 0:
-            raise Exception("stack is empty")
         self.state_stack.append(state)
         self.value_stack.append(value)
 
@@ -113,6 +127,8 @@ class SimpleONParser:
         pass
 
     def parse_line(self, line):
+        if self.sealed:
+            return
         self.buf += line
         self.parse_buf()
         
@@ -132,12 +148,12 @@ class SimpleONParser:
             self.buf_read_pos += 1
         elif start_c == 'x':
             if self.buf_read_pos + 2 >= len(self.buf):
-                raise Exception("expect 2 hex chars for utf-8 escaping")
+                raise ParseException("expect 2 hex chars for utf-8 escaping")
             code_str = self.buf[self.buf_read_pos + 1:self.buf_read_pos + 3]
             try:
                 code = int(code_str, 16)
             except Exception:
-                raise Exception("expect 2 hex chars for utf-8 escaping (parse {0} failed)".format(code_str))
+                raise ParseException("expect 2 hex chars for utf-8 escaping (parse {0} failed)".format(code_str))
             self.value_get().append(code)
             self.buf_read_pos += 3
         elif start_c == '"' or start_c == '\\' or start_c == '/':
@@ -146,18 +162,23 @@ class SimpleONParser:
         else:
             self.value_get().extend(b"\\")
             self.value_get().append(ord(start_c))
+            
+    def clean_buf(self):
+        if self.buf_read_pos > len(self.buf):
+            self.buf_read_pos = len(self.buf)
+        if self.buf_read_pos > self.BUF_CLEAN_SIZE:
+            self.buf = self.buf[self.buf_read_pos:]
+            self.buf_read_pos = 0
         
     def parse_buf(self):
-        if len(self.state_stack) == 0:
-            self.buf = ""
-            self.buf_read_pos = 0
-            return
+        state = None
+        while len(self.buf) > self.buf_read_pos or state == self.STATE_ELEMENT_END:
+        
+            self.clean_buf()
             
-        while len(self.buf) > self.buf_read_pos:
-
-            if self.buf_read_pos > self.BUF_CLEAN_SIZE:
-                self.buf = self.buf[self.buf_read_pos:]
-                self.buf_read_pos = 0
+            if len(self.state_stack) == 0:
+                self.seal()
+                raise ParseException("no more input accepting")
 
             state = self.state_get()
             current = self.value_get()
@@ -169,6 +190,14 @@ class SimpleONParser:
                 if isinstance(value, bytearray):
                     value = value.decode("utf-8")
                 self.pop()
+                
+                if len(self.state_stack) == 0:
+                    self.values.append(value)
+                    
+                    if self.multi:
+                        self.push(self.STATE_ELEMENT_START, None)
+                    
+                    continue
 
                 state = self.state_get()
                 current = self.value_get()
@@ -183,7 +212,7 @@ class SimpleONParser:
                 elif state == self.STATE_LIST:
                     current.append(value)
                 else:
-                    raise Exception("invalid position to insert element")
+                    raise ParseException("invalid position to insert element")
                 
             elif state == self.STATE_QUOTED_STRING:
                 m = self.QUOTED_STRING_SPECIAL_RE.search(self.buf, read_pos)
@@ -202,7 +231,7 @@ class SimpleONParser:
                         read_pos = m.start(0) + 1 
                         state = self.STATE_ELEMENT_END
                     else:
-                        raise Exception("format error in quoted string")
+                        raise ParseException("format error in quoted string")
 
             elif state == self.STATE_MULTILINE_STRING:
                 m = self.MULTILINE_STRING_SPECIAL_RE.search(self.buf, read_pos)
@@ -221,7 +250,7 @@ class SimpleONParser:
                         read_pos = m.start(0) + 3
                         state = self.STATE_ELEMENT_END
                     else:
-                        raise Exception("format error in multi-line string")
+                        raise ParseException("format error in multi-line string")
 
             elif state == self.STATE_DICT_PRE_KEY:
                 m = self.NON_WHITESPACE_RE.search(self.buf, read_pos)
@@ -229,8 +258,8 @@ class SimpleONParser:
                     self.buf_read_pos = len(self.buf)
                 elif self.buf[m.start(0)] == '"' or self.UNQUOTED_RE.match(self.buf[m.start(0)]):
                     self.buf_read_pos = m.start(0)
-                    self.state_set(self.STATE_DICT_KEY);
-                    self.push(self.STATE_ELEMENT_START, None);
+                    self.state_set(self.STATE_DICT_KEY)
+                    self.push(self.STATE_ELEMENT_START, None)
                     continue
                 elif self.buf[m.start(0)] == "}":
                     state = self.STATE_ELEMENT_END
@@ -238,7 +267,7 @@ class SimpleONParser:
                 elif self.buf[m.start(0)] == "#":
                     read_pos = len(self.buf)
                 else:
-                    raise Exception("format error - expecting dict key or end")
+                    raise ParseException("format error - expecting dict key or end")
 
             elif state == self.STATE_DICT_KEY:
                 pass
@@ -255,7 +284,7 @@ class SimpleONParser:
                 elif self.buf[m.start(0)] == "#":
                     read_pos = len(self.buf)                
                 else:
-                    raise Exception("format error - expecting key-value-separator")
+                    raise ParseException("format error - expecting key-value-separator")
             
             elif state == self.STATE_DICT_VALUE:
                 pass
@@ -276,7 +305,7 @@ class SimpleONParser:
                 elif self.buf[m.start(0)] == "#":
                     read_pos = len(self.buf)
                 else:
-                    raise Exception("format error in dict")
+                    raise ParseException("format error in dict")
 
             elif state == self.STATE_LIST:
                 m = self.NON_WHITESPACE_RE.search(self.buf, read_pos)
@@ -328,24 +357,21 @@ class SimpleONParser:
                         current = self.buf[m_end.start(0):m_end.end(0)]
                         state = self.STATE_ELEMENT_END
                         read_pos = m_end.end(0)
-                    if len(self.state_stack) <= 1 or \
-                        self.state_stack[len(self.state_stack) - 2] != self.STATE_DICT_KEY:
+                    if self.to_convert and \
+                        (    len(self.state_stack) <= 1 \
+                        or self.state_stack[len(self.state_stack) - 2] != self.STATE_DICT_KEY):
                         current = self.token_handler(current)
                 else:
-                    raise Exception("format error in parsing general element")
+                    raise ParseException("format error in parsing general element")
 
             self.state_set(state)
             self.value_set(current)
             self.buf_read_pos = read_pos
+            
+        self.clean_buf()
         
     def extract(self):
-        value = None
-        if len(self.state_stack) == 1:
-            value = self.value_stack[0]
-
-        self.state_stack = []
-        self.value_stack = []
-        self.buf = ""
-        self.buf_read_pos = 0
-
-        return value
+        if len(self.values) == 0:
+            return None
+        else:
+            return self.values.popleft()

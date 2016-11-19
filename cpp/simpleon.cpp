@@ -314,9 +314,10 @@ public:
                 auto value = _valueStack.back();
                 
                 _stateStack.pop_back();
-                if (_stateStack.size() == 0) {
+                _valueStack.pop_back();
+				
+				if (_stateStack.size() == 0) {
                     _results.push_back(value);
-                    _valueStack.pop_back();
 
                     if (_multi) {
                         _stateStack.push_back(STATE_ELEMENT_START);
@@ -324,7 +325,6 @@ public:
 
                     break;
                 }
-                _valueStack.pop_back();
                 
                 switch (_stateStack.back()) {
                 case STATE_DICT_KEY:
