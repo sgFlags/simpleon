@@ -139,9 +139,9 @@ private:
     
 public:
 
-    SimpleONParser(bool convert, bool multi) {
-        _convert = convert;
+    SimpleONParser(bool multi, bool convert) {
         _multi = multi;
+        _convert = convert;
         _sealed = false;
         _readPos = 0;
         _stateStack.push_back(STATE_ELEMENT_START);
@@ -567,8 +567,8 @@ public:
     }
 };
 
-IParser * simpleon::CreateSimpleONParser(bool convert, bool multi) {
-    return new SimpleONParser(convert, multi);
+IParser * simpleon::CreateSimpleONParser(bool multi, bool convert) {
+    return new SimpleONParser(multi, convert);
 }
 
 void simpleon::Dump(ostream & o, IData * d) {

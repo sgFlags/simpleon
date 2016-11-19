@@ -47,7 +47,7 @@ namespace simpleon {
         const char * what() const noexcept override;
     };
 
-    IParser * CreateSimpleONParser(bool convert = true, bool multi = true);
+    IParser * CreateSimpleONParser(bool multi = true, bool convert = true);
     void Dump(std::ostream & o, IData * d);
 }
 
