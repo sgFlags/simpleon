@@ -6,7 +6,7 @@ using namespace simpleon;
 using namespace std;
 
 int main() {
-    IParser * parser = CreateSimpleONParser(true, false);
+    IParser * parser = CreateSimpleONParser(true, true);
 
     string line;
     int line_num = 1;

@@ -301,7 +301,7 @@ public:
 
     void ParseBuf() {
         size_t limit = _buf.size();
-        while (_readPos < limit) {
+        while (_readPos < limit || (_stateStack.size() > 0 && _stateStack.back() == STATE_ELEMENT_END)) {
             if (_stateStack.size() == 0) {
                 Seal();
                 return;

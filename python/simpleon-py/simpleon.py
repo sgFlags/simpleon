@@ -178,7 +178,7 @@ class SimpleONParser:
             
             if len(self.state_stack) == 0:
                 self.seal()
-                raise ParseException("no more input accepting")
+                return
 
             state = self.state_get()
             current = self.value_get()
