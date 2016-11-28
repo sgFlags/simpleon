@@ -536,6 +536,10 @@ public:
                     size_t e = s;
                     while (e < limit && !IS_SPECIAL_CHAR(_buf[e])) ++e;
 
+                    if (e == s) {
+                        throw ParseException("unexpected char at element start");
+                    }
+
                     if (_stateStack.size() > 1 && _stateStack[_stateStack.size() - 2] == STATE_DICT_KEY) {
                         HandleUnquotedString(s, e, false);
                     }
@@ -570,6 +574,24 @@ public:
 IParser * simpleon::CreateSimpleONParser(bool multi, bool convert) {
     return new SimpleONParser(multi, convert);
 }
+
+#if __cplusplus < 201402L
+#include <sstream>
+string quoted(const string & s) {
+    ostringstream os;
+    os << '"';
+    for (int i = 0; i < s.size(); ++i) {
+        if (32 <= s[i] && s[i] <= 126) {
+            if (s[i] == '"' || s[i] == '\\')
+                os << '\\';
+            os << s[i];
+        }
+        else os << '\\' << 'x' << "0123456789abcdef"[(unsigned char)s[i] >> 4] << "0123456789abcdef"[s[i] & 0xf];  
+    }
+    os << '"';
+    return os.str();
+}
+#endif
 
 void simpleon::Dump(ostream & o, IData * d) {
     if (d == nullptr) {
