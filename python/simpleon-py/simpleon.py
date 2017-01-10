@@ -255,7 +255,7 @@ class SimpleONParser:
             elif state == self.STATE_DICT_PRE_KEY:
                 m = self.NON_WHITESPACE_RE.search(self.buf, read_pos)
                 if not m:
-                    self.buf_read_pos = len(self.buf)
+                    read_pos = len(self.buf)
                 elif self.buf[m.start(0)] == '"' or self.UNQUOTED_RE.match(self.buf[m.start(0)]):
                     self.buf_read_pos = m.start(0)
                     self.state_set(self.STATE_DICT_KEY)
